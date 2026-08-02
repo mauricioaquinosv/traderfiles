@@ -206,7 +206,7 @@ export default function CalendarPage() {
         <div className="flex items-center justify-between px-8 py-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
           <div>
             <p className="text-xs capitalize" style={{ color: 'var(--color-text-secondary)' }}>{today}</p>
-            <h1 className="font-display text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Calendario de P&L</h1>
+            <h1 className="font-display text-[22px] font-semibold" style={{ color: 'var(--color-text)' }}>Calendario de P&L</h1>
           </div>
           <Topbar />
         </div>

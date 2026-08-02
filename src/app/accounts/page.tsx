@@ -129,7 +129,7 @@ const handleEditClick = (acc: Account) => {
       <main className="ml-60 p-8">
         <div>
           <div className="mb-8">
-            <h1 className="font-display text-2xl font-bold text-white">
+            <h1 className="font-display text-[22px] font-semibold text-white">
               Cuentas
             </h1>
             <p className="text-zinc-500 text-sm mt-1">

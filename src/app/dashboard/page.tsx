@@ -193,7 +193,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
           <div>
             <p className="text-xs capitalize" style={{ color: 'var(--color-text-secondary)' }}>{today}</p>
-            <h1 className="font-display text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Dashboard</h1>
+            <h1 className="font-display text-[22px] font-semibold" style={{ color: 'var(--color-text)' }}>Dashboard</h1>
           </div>
           <Topbar />
         </div>

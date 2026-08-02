@@ -7,6 +7,7 @@ import type { User } from '@supabase/supabase-js'
 import type { Trade } from '@/lib/types'
 import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
+import DateMaskInput from '@/components/DateMaskInput'
 import { useAccount } from '@/contexts/AccountContext'
 import * as XLSX from 'xlsx'
 import { Download, Upload, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Columns3, FileSpreadsheet } from 'lucide-react'
@@ -466,7 +467,7 @@ export default function TradesPage() {
         <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
           <div>
             <p className="text-xs capitalize" style={{ color: 'var(--color-text-secondary)' }}>{today}</p>
-            <h1 className="font-display text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Historial de trades</h1>
+            <h1 className="font-display text-[22px] font-semibold" style={{ color: 'var(--color-text)' }}>Historial de trades</h1>
           </div>
           <div className="flex items-center gap-2">
             <Topbar />
@@ -501,13 +502,13 @@ export default function TradesPage() {
                   <option value="">Todos los tags</option>
                   {uniqueTags.map((t) => <option key={t} value={t}>#{t}</option>)}
                 </select>
-                <input
-                  type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)}
-                  className="px-3 py-2 border rounded-lg text-sm focus:outline-none" style={inputStyle}
+                <DateMaskInput
+                  value={filterFrom} onChange={setFilterFrom}
+                  className="px-3 py-2 border rounded-lg text-sm focus:outline-none w-[130px]" style={inputStyle}
                 />
-                <input
-                  type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)}
-                  className="px-3 py-2 border rounded-lg text-sm focus:outline-none" style={inputStyle}
+                <DateMaskInput
+                  value={filterTo} onChange={setFilterTo}
+                  className="px-3 py-2 border rounded-lg text-sm focus:outline-none w-[130px]" style={inputStyle}
                 />
                 {hasFilters && (
                   <button
@@ -570,22 +571,22 @@ export default function TradesPage() {
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                    <table className="w-full">
                       <thead>
                         <tr style={{ color: 'var(--color-text-tertiary)' }}>
                           {HISTORY_COLUMNS.filter((c) => visibleColumns.includes(c.key)).map((c) => (
-                            <th key={c.key} className="text-left font-medium uppercase tracking-wide pb-3 pr-4">{c.label}</th>
+                            <th key={c.key} className="text-left font-semibold uppercase tracking-wide text-[11px] pb-[10px] pr-[10px]">{c.label}</th>
                           ))}
-                          <th className="pb-3" />
+                          <th className="pb-[10px]" />
                         </tr>
                       </thead>
                       <tbody>
                         {pageTrades.map((trade) => (
                           <tr key={trade.id} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
                             {HISTORY_COLUMNS.filter((c) => visibleColumns.includes(c.key)).map((c) => (
-                              <td key={c.key} className="py-3 pr-4">{renderCell(c.key, trade)}</td>
+                              <td key={c.key} className="text-[13px] py-[11px] pr-[10px]">{renderCell(c.key, trade)}</td>
                             ))}
-                            <td className="py-3">
+                            <td className="py-[11px]">
                               <div className="flex items-center gap-3">
                                 <button onClick={() => handleEditClick(trade)} title="Editar" style={{ color: 'var(--color-text-secondary)' }} className="hover:opacity-80">
                                   <Pencil size={14} />

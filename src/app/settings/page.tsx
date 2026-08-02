@@ -43,7 +43,7 @@ export default function SettingsPage() {
       <main className="ml-60 p-8">
         <div className="max-w-xl mx-auto">
           <div className="mb-6">
-            <h1 className="font-display text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
+            <h1 className="font-display text-[22px] font-semibold" style={{ color: 'var(--color-text)' }}>
               Configuración
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
