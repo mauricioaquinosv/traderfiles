@@ -18,6 +18,28 @@ import { Info } from 'lucide-react'
 const fmtMoney = (n: number) =>
   `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+type DailyEquityPoint = { index: number; date: string; dateLabel: string; pnl: number; dayPnl: number }
+
+function CumulativeTooltip({
+  active, label, data,
+}: { active?: boolean; label?: string; data: DailyEquityPoint[] }) {
+  if (!active) return null
+  const point = data.find((p) => p.dateLabel === label)
+  if (!point) return null
+  return (
+    <div
+      className="rounded-lg border px-3 py-2 text-xs"
+      style={{ backgroundColor: 'var(--color-surface-2)', borderColor: 'var(--color-border)' }}
+    >
+      <p className="mb-1" style={{ color: 'var(--color-text-secondary)' }}>{point.dateLabel}</p>
+      <p className="font-semibold" style={{ color: 'var(--color-text)' }}>Acumulado: {fmtMoney(point.pnl)}</p>
+      <p style={{ color: point.dayPnl >= 0 ? 'var(--color-green)' : 'var(--color-red)' }}>
+        P&L del día: {fmtMoney(point.dayPnl)}
+      </p>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -71,7 +93,9 @@ export default function DashboardPage() {
   }
 
   const closedTrades = trades.filter((t) => t.pnl !== null)
-  const pnls = closedTrades.map((t) => t.pnl!)
+  // Neto real de cada trade: pnl menos la comisión (antes se ignoraba la comisión aquí)
+  const netOf = (t: Trade) => (t.pnl as number) - (t.commission ?? 0)
+  const pnls = closedTrades.map(netOf)
   const netPnl = pnls.reduce((sum, p) => sum + p, 0)
   const wins = pnls.filter((p) => p > 0)
   const losses = pnls.filter((p) => p < 0)
@@ -89,22 +113,56 @@ export default function DashboardPage() {
   let peak = 0
   let maxDrawdown = 0
   const equityCurve = sortedByDate.map((t, i) => {
-    cumulative += t.pnl!
+    cumulative += netOf(t)
     peak = Math.max(peak, cumulative)
     maxDrawdown = Math.max(maxDrawdown, peak - cumulative)
     return { trade: i + 1, pnl: parseFloat(cumulative.toFixed(2)) }
   })
 
-  // P&L agrupado por día (para el gráfico de barras y day win %)
+  // P&L agrupado por día (para el gráfico de barras, day win % y la curva acumulada diaria)
   const pnlByDay: Record<string, number> = {}
   sortedByDate.forEach((t) => {
     const day = new Date(t.entry_date).toISOString().slice(0, 10)
-    pnlByDay[day] = (pnlByDay[day] ?? 0) + t.pnl!
+    pnlByDay[day] = (pnlByDay[day] ?? 0) + netOf(t)
   })
   const dailyBars = Object.entries(pnlByDay)
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .slice(-14)
     .map(([day, pnl]) => ({ day: day.slice(5), pnl: parseFloat(pnl.toFixed(2)) }))
+
+  // Curva acumulada agrupada por día: un punto por día de trading (con su fecha real)
+  // en vez de un punto por trade individual. Esto es lo que alimenta el eje X con
+  // fechas y permite pintar cada tramo de verde/rojo según si ese día fue positivo o negativo.
+  let dailyCumulative = 0
+  const dailyEquityCurve = Object.keys(pnlByDay)
+    .sort()
+    .map((day, i) => {
+      const dayPnl = pnlByDay[day]
+      dailyCumulative += dayPnl
+      return {
+        index: i,
+        date: day,
+        dateLabel: new Date(day + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+        pnl: parseFloat(dailyCumulative.toFixed(2)),
+        dayPnl: parseFloat(dayPnl.toFixed(2)),
+      }
+    })
+  // Paradas de un gradiente horizontal para pintar cada tramo de verde/rojo
+  // (sube/baja) SIN usar múltiples <Line> superpuestas. Una sola línea con
+  // stroke="url(#curveStroke)" usando el mismo `data` del gráfico — así no hay
+  // forma de que se desalinee con el eje X (fue justo lo que falló antes: pasarle
+  // a cada tramo su propio array de datos hacía que Recharts lo ubicara mal).
+  // Se generaliza el truco de "zeroOffset" que ya tenía el código original para
+  // un solo cruce, pero ahora con una parada por cada cambio de dirección.
+  const n = dailyEquityCurve.length
+  const curveGradientStops: { offset: number; color: string }[] = []
+  for (let j = 1; j < n; j++) {
+    const color = dailyEquityCurve[j].dayPnl >= 0 ? '#2ECC8F' : '#F0555A'
+    curveGradientStops.push({ offset: (j - 1) / (n - 1), color })
+    curveGradientStops.push({ offset: j / (n - 1), color })
+  }
+  if (curveGradientStops.length === 0) curveGradientStops.push({ offset: 0, color: accentColor })
+  const curveTickInterval = Math.max(0, Math.ceil(dailyEquityCurve.length / 6) - 1)
 
   const tradingDays = Object.keys(pnlByDay).length
   const winningDays = Object.values(pnlByDay).filter((v) => v > 0).length
@@ -144,11 +202,6 @@ export default function DashboardPage() {
   const overallScore = Math.round((consistency + winRateScore + profitFactorScore + ddScore + rrScore) / 5)
 
   const gaugeData = [{ value: winRate, fill: accentColor }]
-  // Punto donde la curva cruza cero, para pintar verde arriba / rojo abajo
-  const pnlValues = equityCurve.map((p) => p.pnl)
-  const maxPnl = pnlValues.length ? Math.max(...pnlValues, 0) : 0
-  const minPnl = pnlValues.length ? Math.min(...pnlValues, 0) : 0
-  const zeroOffset = maxPnl <= 0 ? 0 : minPnl >= 0 ? 1 : maxPnl / (maxPnl - minPnl)
 
   const recentTrades = [...trades]
     .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())
@@ -284,21 +337,23 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div className="glass-panel p-6">
                 <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Daily Net Cumulative P&L</p>
-                {equityCurve.length === 0 ? (
+                {dailyEquityCurve.length === 0 ? (
                 <div className="h-52 flex items-center justify-center">
                   <p className="text-sm text-center" style={{ color: 'var(--color-text-muted)' }}>Cierra al menos un trade para ver tu curva de rendimiento.</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={equityCurve}>
+                  <AreaChart data={dailyEquityCurve}>
                     <defs>
-                      <linearGradient id="splitFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset={zeroOffset} stopColor="#2ECC8F" stopOpacity={0.35} />
-                        <stop offset={zeroOffset} stopColor="#F0555A" stopOpacity={0.35} />
+                      <linearGradient id="curveFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={accentColor} stopOpacity={0.28} />
+                        <stop offset="100%" stopColor={accentColor} stopOpacity={0} />
                       </linearGradient>
-                      <linearGradient id="splitStroke" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset={zeroOffset} stopColor="#2ECC8F" />
-                        <stop offset={zeroOffset} stopColor="#F0555A" />
+                      {/* Gradiente horizontal: una parada dura por cada cambio de dirección día a día */}
+                      <linearGradient id="curveStroke" x1="0" y1="0" x2="1" y2="0">
+                        {curveGradientStops.map((s, i) => (
+                          <stop key={i} offset={s.offset} stopColor={s.color} />
+                        ))}
                       </linearGradient>
                       <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
                         <feGaussianBlur stdDeviation="4" result="blur" />
@@ -309,18 +364,19 @@ export default function DashboardPage() {
                       </filter>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="trade" stroke="var(--color-text-tertiary)" fontSize={11} />
+                    <XAxis dataKey="dateLabel" stroke="var(--color-text-tertiary)" fontSize={11} interval={curveTickInterval} />
                     <YAxis stroke="var(--color-text-tertiary)" fontSize={11} tickFormatter={(v) => fmtMoney(v)} width={70} />
-                    <Tooltip formatter={(value: any) => fmtMoney(Number(value))} contentStyle={{ backgroundColor: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: '8px' }} labelStyle={{ color: 'var(--color-text-secondary)' }} />
+                    <Tooltip content={<CumulativeTooltip data={dailyEquityCurve} />} />
                     <Area
                       type="monotone"
                       dataKey="pnl"
-                      stroke="url(#splitStroke)"
+                      stroke="url(#curveStroke)"
                       strokeWidth={2.5}
-                      fill="url(#splitFill)"
+                      fill="url(#curveFill)"
                       dot={false}
-                      activeDot={{ r: 4 }}
+                      activeDot={{ r: 4, fill: accentColor }}
                       style={{ filter: 'url(#glow)' }}
+                      isAnimationActive={false}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -418,8 +474,8 @@ export default function DashboardPage() {
                               {t.direction === 'long' ? 'Long' : 'Short'}
                             </span>
                           </td>
-                          <td className="py-2 text-right font-semibold" style={{ color: t.pnl === null ? 'var(--color-text-secondary)' : t.pnl >= 0 ? 'var(--color-green)' : 'var(--color-red)' }}>
-                            {t.pnl !== null ? fmtMoney(t.pnl) : '—'}
+                          <td className="py-2 text-right font-semibold" style={{ color: t.pnl === null ? 'var(--color-text-secondary)' : netOf(t) >= 0 ? 'var(--color-green)' : 'var(--color-red)' }}>
+                            {t.pnl !== null ? fmtMoney(netOf(t)) : '—'}
                           </td>
                         </tr>
                       ))}
