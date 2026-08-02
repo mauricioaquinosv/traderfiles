@@ -42,6 +42,7 @@ export default function TradesPage() {
   const supabase = createClient()
   const { activeAccountId, loading: accountLoading } = useAccount()
 
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [symbol, setSymbol] = useState('')
   const [direction, setDirection] = useState<'long' | 'short'>('long')
   const [entryPrice, setEntryPrice] = useState('')
@@ -62,11 +63,14 @@ export default function TradesPage() {
   const [filterTag, setFilterTag] = useState('')
   const [filterFrom, setFilterFrom] = useState('')
   const [filterTo, setFilterTo] = useState('')
+  const [historyPage, setHistoryPage] = useState(1)
+const PAGE_SIZE = 10
 
   const [importRows, setImportRows] = useState<ImportRow[]>([])
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const formRef = useRef<HTMLDivElement>(null)
 
   const loadTrades = useCallback(async (accId: string) => {
     const { data, error } = await supabase
@@ -97,30 +101,44 @@ export default function TradesPage() {
       setTrades([])
     }
   }, [activeAccountId, accountLoading, loadTrades])
+  useEffect(() => {
+  setHistoryPage(1)
+}, [filterSymbol, filterStrategy, filterTag, filterFrom, filterTo])
 
-  const calculateRiskReward = () => {
-  const entry = parseFloat(entryPrice)
-  const sl = parseFloat(stopLoss)
-  const tp = parseFloat(takeProfit)
-  const qty = parseFloat(quantity) || 0
-
-  if (isNaN(entry) || isNaN(sl) || isNaN(tp)) return null
-
-  const risk = direction === 'long' ? entry - sl : sl - entry
-  const reward = direction === 'long' ? tp - entry : entry - tp
-
-  if (risk <= 0 || reward <= 0) return { invalid: true, risk, reward, ratio: 0, riskAmount: 0 }
-
-  const ratio = reward / risk
-  const riskAmount = risk * qty
-
-  return { invalid: false, risk, reward, ratio, riskAmount }
-}
-
-const rr = calculateRiskReward()
   const calculatePnL = (entry: number, exit: number, qty: number, dir: string, comm: number) => {
     const diff = dir === 'long' ? exit - entry : entry - exit
     return diff * qty - comm
+  }
+
+  const resetForm = () => {
+    setEditingId(null)
+    setSymbol(''); setEntryPrice(''); setExitPrice(''); setQuantity(''); setCommission('')
+    setStopLoss(''); setTakeProfit(''); setStrategy(''); setTagsInput(''); setNotes(''); setEntryDate('')
+  }
+
+  // Convierte una fecha ISO guardada en base de datos al formato que necesita el input datetime-local
+  const toDatetimeLocal = (iso: string) => {
+    const d = new Date(iso)
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  const handleEditClick = (trade: Trade) => {
+    setEditingId(trade.id)
+    setSymbol(trade.symbol)
+    setDirection(trade.direction)
+    setEntryPrice(trade.entry_price?.toString() ?? '')
+    setExitPrice(trade.exit_price?.toString() ?? '')
+    setQuantity(trade.quantity.toString())
+    setCommission(trade.commission?.toString() ?? '')
+    setStopLoss(trade.stop_loss?.toString() ?? '')
+    setTakeProfit(trade.take_profit?.toString() ?? '')
+    setStrategy(trade.strategy ?? '')
+    setTagsInput(trade.tags?.join(', ') ?? '')
+    setNotes(trade.notes ?? '')
+    setEntryDate(toDatetimeLocal(trade.entry_date))
+    setMessage('')
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const handleAddTrade = async (e: React.FormEvent) => {
@@ -136,9 +154,7 @@ const rr = calculateRiskReward()
     const pnl = exit !== null ? calculatePnL(entry, exit, qty, direction, comm) : null
     const tags = tagsInput.split(',').map((t) => t.trim()).filter((t) => t.length > 0)
 
-    const { error } = await supabase.from('trades').insert({
-      account_id: activeAccountId,
-      user_id: user?.id,
+    const tradeData = {
       symbol: symbol.toUpperCase(),
       direction,
       entry_price: entry,
@@ -152,22 +168,41 @@ const rr = calculateRiskReward()
       tags,
       notes: notes || null,
       entry_date: entryDate ? new Date(entryDate).toISOString() : new Date().toISOString(),
-    })
-
-    if (error) {
-      setMessage('Error: ' + error.message)
-    } else {
-      setMessage('¡Trade guardado!')
-      setSymbol(''); setEntryPrice(''); setExitPrice(''); setQuantity(''); setCommission('')
-      setStopLoss(''); setTakeProfit(''); setStrategy(''); setTagsInput(''); setNotes(''); setEntryDate('')
-      loadTrades(activeAccountId)
     }
+
+    if (editingId) {
+      const { error } = await supabase.from('trades').update(tradeData).eq('id', editingId)
+      if (error) {
+        setMessage('Error: ' + error.message)
+      } else {
+        setMessage('¡Trade actualizado!')
+        resetForm()
+        loadTrades(activeAccountId)
+      }
+    } else {
+      const { error } = await supabase.from('trades').insert({
+        account_id: activeAccountId,
+        user_id: user?.id,
+        ...tradeData,
+      })
+      if (error) {
+        setMessage('Error: ' + error.message)
+      } else {
+        setMessage('¡Trade guardado!')
+        resetForm()
+        loadTrades(activeAccountId)
+      }
+    }
+
     setSaving(false)
   }
 
   const handleDeleteTrade = async (id: string) => {
     const { error } = await supabase.from('trades').delete().eq('id', id)
-    if (!error && activeAccountId) loadTrades(activeAccountId)
+    if (!error && activeAccountId) {
+      if (editingId === id) resetForm()
+      loadTrades(activeAccountId)
+    }
   }
 
   // --- Importación desde Excel ---
@@ -292,6 +327,9 @@ const rr = calculateRiskReward()
     if (filterTo && new Date(trade.entry_date) > new Date(filterTo + 'T23:59:59')) return false
     return true
   })
+  const totalPages = Math.max(1, Math.ceil(filteredTrades.length / PAGE_SIZE))
+const safePage = Math.min(historyPage, totalPages)
+const pageTrades = filteredTrades.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   const uniqueStrategies = Array.from(new Set(trades.map((t) => t.strategy).filter(Boolean))) as string[]
   const uniqueTags = Array.from(new Set(trades.flatMap((t) => t.tags ?? [])))
@@ -404,8 +442,11 @@ const rr = calculateRiskReward()
                 )}
               </div>
 
-              <div className="p-6 rounded-2xl border mb-6" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                <h2 className="font-display text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Registrar trade</h2>
+              {/* Formulario de trade */}
+              <div ref={formRef} className="p-6 rounded-2xl border mb-6" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                <h2 className="font-display text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
+                  {editingId ? 'Editar trade' : 'Registrar trade'}
+                </h2>
                 <form onSubmit={handleAddTrade}>
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
@@ -451,27 +492,25 @@ const rr = calculateRiskReward()
                       <input type="number" step="any" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)}
                         className="w-full px-3 py-2 border rounded-lg focus:outline-none" style={inputStyle} />
                     </div>
-                    {rr && (
-  <div className="col-span-2 p-3 rounded-lg text-sm" style={{
-    background: rr.invalid ? 'rgba(248,113,113,0.1)' : 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
-    border: `1px solid ${rr.invalid ? '#F87171' : 'var(--color-accent)'}`,
-  }}>
-    {rr.invalid ? (
-      <span style={{ color: '#F87171' }}>
-        Revisa el SL/TP: no generan un riesgo/beneficio válido para esta dirección ({direction === 'long' ? 'Long' : 'Short'}).
-      </span>
-    ) : (
-      <div className="flex justify-between items-center">
-        <span style={{ color: 'var(--color-text)' }}>
-          Ratio Risk/Reward: <strong>1:{rr.ratio.toFixed(2)}</strong>
-        </span>
-        <span style={{ color: 'var(--color-text-muted)' }}>
-          Riesgo total: <strong style={{ color: 'var(--color-text)' }}>{rr.riskAmount.toFixed(2)}</strong>
-        </span>
-      </div>
-    )}
-  </div>
-)}
+
+                    {(() => {
+                      const entry = parseFloat(entryPrice)
+                      const sl = parseFloat(stopLoss)
+                      const tp = parseFloat(takeProfit)
+                      if (isNaN(entry) || isNaN(sl) || isNaN(tp) || entry === sl) return null
+                      const risk = Math.abs(entry - sl)
+                      const reward = Math.abs(tp - entry)
+                      const ratio = risk > 0 ? reward / risk : 0
+                      return (
+                        <div className="col-span-2 p-3 rounded-lg border flex items-center justify-between" style={{ background: 'var(--color-surface-alt)', borderColor: 'var(--color-border)' }}>
+                          <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Risk/Reward calculado</span>
+                          <span className="font-display text-lg font-bold" style={{ color: ratio >= 2 ? '#34D399' : ratio >= 1 ? '#FBBF24' : '#F87171' }}>
+                            1 : {ratio.toFixed(2)}
+                          </span>
+                        </div>
+                      )
+                    })()}
+
                     <div>
                       <label className="block text-sm mb-1" style={{ color: 'var(--color-text-muted)' }}>Estrategia (opcional)</label>
                       <input type="text" placeholder="Ruptura de rango" value={strategy} onChange={(e) => setStrategy(e.target.value)}
@@ -503,11 +542,23 @@ const rr = calculateRiskReward()
                   <button type="submit" disabled={saving}
                     className="w-full font-semibold py-2 rounded-lg transition disabled:opacity-50"
                     style={{ background: 'var(--color-accent)', color: 'var(--color-bg)' }}>
-                    {saving ? 'Guardando...' : 'Guardar trade'}
+                    {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Guardar trade'}
                   </button>
+
+                  {editingId && (
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="w-full text-sm mt-2 hover:opacity-80"
+                      style={{ color: 'var(--color-text-muted)' }}
+                    >
+                      Cancelar edición
+                    </button>
+                  )}
                 </form>
               </div>
 
+              {/* Historial */}
               <div className="p-6 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                 <h2 className="font-display text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
                   Historial de trades ({filteredTrades.length})
@@ -548,8 +599,15 @@ const rr = calculateRiskReward()
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {filteredTrades.map((trade) => (
-                      <div key={trade.id} className="flex justify-between items-center p-4 rounded-xl border" style={{ background: 'var(--color-surface-alt)', borderColor: 'var(--color-border)' }}>
+                    {pageTrades.map((trade) => (
+                      <div
+                        key={trade.id}
+                        className="flex justify-between items-center p-4 rounded-xl border"
+                        style={{
+                          background: 'var(--color-surface-alt)',
+                          borderColor: editingId === trade.id ? 'var(--color-accent)' : 'var(--color-border)',
+                        }}
+                      >
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{trade.symbol}</span>
@@ -579,12 +637,57 @@ const rr = calculateRiskReward()
                               {trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(2)}
                             </span>
                           )}
+                          <button onClick={() => handleEditClick(trade)} className="text-sm hover:opacity-80" style={{ color: 'var(--color-accent)' }}>
+                            Editar
+                          </button>
                           <button onClick={() => handleDeleteTrade(trade.id)} className="text-sm hover:opacity-80" style={{ color: 'var(--color-text-muted)' }}>
                             Eliminar
                           </button>
                         </div>
                       </div>
-                    ))}
+                   ))}
+                  </div>
+                )}
+
+                {filteredTrades.length > 0 && (
+                  <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                    <p className="text-xs mr-auto" style={{ color: 'var(--color-text-muted)' }}>
+                      Mostrando {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filteredTrades.length)} de {filteredTrades.length} trades
+                    </p>
+                    <button
+                      onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage <= 1}
+                      className="w-7 h-7 rounded-lg border text-xs flex items-center justify-center disabled:opacity-40"
+                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+                    >
+                      ‹
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                      .map((p, idx, arr) => (
+                        <span key={p} className="flex items-center gap-2">
+                          {idx > 0 && arr[idx - 1] !== p - 1 && <span style={{ color: 'var(--color-text-muted)' }}>…</span>}
+                          <button
+                            onClick={() => setHistoryPage(p)}
+                            className="w-7 h-7 rounded-lg border text-xs flex items-center justify-center"
+                            style={{
+                              borderColor: p === safePage ? 'var(--color-accent)' : 'var(--color-border)',
+                              color: p === safePage ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                              background: p === safePage ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
+                            }}
+                          >
+                            {p}
+                          </button>
+                        </span>
+                      ))}
+                    <button
+                      onClick={() => setHistoryPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage >= totalPages}
+                      className="w-7 h-7 rounded-lg border text-xs flex items-center justify-center disabled:opacity-40"
+                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+                    >
+                      ›
+                    </button>
                   </div>
                 )}
               </div>

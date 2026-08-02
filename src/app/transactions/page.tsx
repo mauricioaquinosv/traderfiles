@@ -19,6 +19,7 @@ export default function TransactionsPage() {
   const [user, setUser] = useState<User | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [tradesPnL, setTradesPnL] = useState(0)
   const router = useRouter()
   const supabase = createClient()
   const { activeAccountId, activeAccount, loading: accountLoading } = useAccount()
@@ -30,14 +31,25 @@ export default function TransactionsPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
-  const loadTransactions = useCallback(async (accId: string) => {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('account_id', accId)
-      .order('date', { ascending: false })
-    if (!error && data) setTransactions(data)
-  }, [supabase])
+const loadTransactions = useCallback(async (accId: string) => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('account_id', accId)
+    .order('date', { ascending: false })
+  if (!error && data) setTransactions(data)
+}, [supabase])
+
+const loadTradesPnL = useCallback(async (accId: string) => {
+  const { data, error } = await supabase
+    .from('trades')
+    .select('pnl')
+    .eq('account_id', accId)
+  if (!error && data) {
+    const total = data.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
+    setTradesPnL(total)
+  }
+}, [supabase])
 
   useEffect(() => {
     const getUser = async () => {
@@ -52,13 +64,15 @@ export default function TransactionsPage() {
     getUser()
   }, [router, supabase])
 
-  useEffect(() => {
-    if (!accountLoading && activeAccountId) {
-      loadTransactions(activeAccountId)
-    } else if (!accountLoading && !activeAccountId) {
-      setTransactions([])
-    }
-  }, [activeAccountId, accountLoading, loadTransactions])
+useEffect(() => {
+  if (!accountLoading && activeAccountId) {
+    loadTransactions(activeAccountId)
+    loadTradesPnL(activeAccountId)
+  } else if (!accountLoading && !activeAccountId) {
+    setTransactions([])
+    setTradesPnL(0)
+  }
+}, [activeAccountId, accountLoading, loadTransactions, loadTradesPnL])
 
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -102,7 +116,7 @@ export default function TransactionsPage() {
 
   const totalDeposits = transactions.filter((t) => t.type === 'deposit').reduce((s, t) => s + t.amount, 0)
   const totalWithdrawals = transactions.filter((t) => t.type === 'withdrawal').reduce((s, t) => s + t.amount, 0)
-  const currentBalance = (activeAccount?.initial_balance ?? 0) + totalDeposits - totalWithdrawals
+  const currentBalance = (activeAccount?.initial_balance ?? 0) + tradesPnL + totalDeposits - totalWithdrawals
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -123,13 +137,19 @@ export default function TransactionsPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="p-5 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                  <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>Balance actual</p>
-                  <p className="font-display text-xl font-bold" style={{ color: 'var(--color-text)' }}>
-                    {currentBalance.toFixed(2)} {activeAccount?.currency}
-                  </p>
-                </div>
+  <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>Balance actual</p>
+  <p className="font-display text-xl font-bold" style={{ color: 'var(--color-text)' }}>
+    {currentBalance.toFixed(2)} {activeAccount?.currency}
+  </p>
+</div>
+<div className="p-5 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+  <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>P&L de trading</p>
+  <p className="font-display text-xl font-bold" style={{ color: tradesPnL >= 0 ? '#34D399' : '#F87171' }}>
+    {tradesPnL >= 0 ? '+' : ''}{tradesPnL.toFixed(2)}
+  </p>
+</div>
                 <div className="p-5 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                   <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>Depósitos totales</p>
                   <p className="font-display text-xl font-bold" style={{ color: '#34D399' }}>+{totalDeposits.toFixed(2)}</p>

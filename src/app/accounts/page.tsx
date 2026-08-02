@@ -14,12 +14,13 @@ export default function AccountsPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [name, setName] = useState('')
-  const [initialBalance, setInitialBalance] = useState('')
-  const [currency, setCurrency] = useState('USD')
-  const [broker, setBroker] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState('')
+const [name, setName] = useState('')
+const [initialBalance, setInitialBalance] = useState('')
+const [currency, setCurrency] = useState('USD')
+const [broker, setBroker] = useState('')
+const [saving, setSaving] = useState(false)
+const [message, setMessage] = useState('')
+const [editingId, setEditingId] = useState<string | null>(null)
 
   const loadAccounts = useCallback(async () => {
     const { data, error } = await supabase
@@ -46,11 +47,25 @@ export default function AccountsPage() {
     getUser()
   }, [router, supabase, loadAccounts])
 
-  const handleCreateAccount = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    setMessage('')
+const handleCreateAccount = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setSaving(true)
+  setMessage('')
 
+  if (editingId) {
+    const { error } = await supabase
+      .from('accounts')
+      .update({ name, currency, broker: broker || null })
+      .eq('id', editingId)
+
+    if (error) {
+      setMessage('Error: ' + error.message)
+    } else {
+      setMessage('¡Cuenta actualizada!')
+      resetForm()
+      loadAccounts()
+    }
+  } else {
     const { error } = await supabase.from('accounts').insert({
       user_id: user?.id,
       name,
@@ -63,14 +78,29 @@ export default function AccountsPage() {
       setMessage('Error: ' + error.message)
     } else {
       setMessage('¡Cuenta creada!')
-      setName('')
-      setInitialBalance('')
-      setBroker('')
+      resetForm()
       loadAccounts()
     }
-
-    setSaving(false)
   }
+
+  setSaving(false)
+}
+
+const resetForm = () => {
+  setName('')
+  setInitialBalance('')
+  setBroker('')
+  setEditingId(null)
+}
+
+const handleEditClick = (acc: Account) => {
+  setEditingId(acc.id)
+  setName(acc.name)
+  setInitialBalance(acc.initial_balance.toString())
+  setCurrency(acc.currency)
+  setBroker(acc.broker || '')
+  setMessage('')
+}
 
   const handleSelectAccount = (accountId: string) => {
     localStorage.setItem('activeAccountId', accountId)
@@ -126,19 +156,25 @@ export default function AccountsPage() {
                       </p>
                     </div>
                     <div className="flex gap-3">
-                      <button
-                        onClick={() => handleSelectAccount(acc.id)}
-                        className="bg-[#E8A33D] hover:bg-[#D6922E] text-[#0A0B0F] font-semibold px-4 py-1.5 rounded-lg text-sm transition"
-                      >
-                        Usar
-                      </button>
-                      <button
-                        onClick={() => handleDeleteAccount(acc.id)}
-                        className="text-zinc-500 hover:text-red-400 text-sm"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+  <button
+    onClick={() => handleSelectAccount(acc.id)}
+    className="bg-[#E8A33D] hover:bg-[#D6922E] text-[#0A0B0F] font-semibold px-4 py-1.5 rounded-lg text-sm transition"
+  >
+    Usar
+  </button>
+  <button
+    onClick={() => handleEditClick(acc)}
+    className="text-zinc-400 hover:text-white text-sm"
+  >
+    Editar
+  </button>
+  <button
+    onClick={() => handleDeleteAccount(acc.id)}
+    className="text-zinc-500 hover:text-red-400 text-sm"
+  >
+    Eliminar
+  </button>
+</div>
                   </div>
                 ))}
               </div>
@@ -146,9 +182,9 @@ export default function AccountsPage() {
           )}
 
           <div className="bg-[#14161C] p-6 rounded-2xl border border-[#1F222B]">
-            <h2 className="font-display text-lg font-semibold text-white mb-4">
-              Crear nueva cuenta
-            </h2>
+            <h2 className="font-display text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
+  {editingId ? 'Editar cuenta' : 'Crear nueva cuenta'}
+</h2>
 
             <form onSubmit={handleCreateAccount}>
               <div className="grid grid-cols-2 gap-4 mb-4">
@@ -165,17 +201,21 @@ export default function AccountsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">Balance inicial</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="10000"
-                    value={initialBalance}
-                    onChange={(e) => setInitialBalance(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 bg-[#0D0F14] border border-[#1F222B] rounded-lg text-white focus:outline-none focus:border-[#E8A33D]"
-                  />
-                </div>
+  <label className="block text-sm text-zinc-400 mb-1">Balance inicial</label>
+  <input
+    type="number"
+    step="any"
+    placeholder="10000"
+    value={initialBalance}
+    onChange={(e) => setInitialBalance(e.target.value)}
+    required
+    disabled={!!editingId}
+    className="w-full px-3 py-2 bg-[#0D0F14] border border-[#1F222B] rounded-lg text-white focus:outline-none focus:border-[#E8A33D] disabled:opacity-50"
+  />
+  {editingId && (
+    <p className="text-xs text-zinc-500 mt-1">El balance inicial no se puede editar. Usa Transacciones para ajustar capital.</p>
+  )}
+</div>
 
                 <div>
                   <label className="block text-sm text-zinc-400 mb-1">Moneda</label>
@@ -209,12 +249,21 @@ export default function AccountsPage() {
               )}
 
               <button
-                type="submit"
-                disabled={saving}
-                className="w-full bg-[#E8A33D] hover:bg-[#D6922E] text-[#0A0B0F] font-semibold py-2 rounded-lg transition disabled:opacity-50"
-              >
-                {saving ? 'Creando...' : 'Crear cuenta'}
-              </button>
+  type="submit"
+  disabled={saving}
+  className="w-full bg-[#E8A33D] hover:bg-[#D6922E] text-[#0A0B0F] font-semibold py-2 rounded-lg transition disabled:opacity-50"
+>
+  {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear cuenta'}
+</button>
+{editingId && (
+  <button
+    type="button"
+    onClick={resetForm}
+    className="w-full text-sm text-zinc-400 hover:text-white mt-2"
+  >
+    Cancelar edición
+  </button>
+)}
             </form>
           </div>
         </div>

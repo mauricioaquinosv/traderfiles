@@ -5,10 +5,10 @@ import { createContext, useContext, useEffect, useState } from 'react'
 type Theme = 'dark' | 'light'
 
 const ACCENT_OPTIONS = [
+  { name: 'Morado (original)', value: '#4A47A3', hover: '#625FBF' },
   { name: 'Ámbar', value: '#E8A33D', hover: '#D6922E' },
   { name: 'Esmeralda', value: '#10B981', hover: '#059669' },
   { name: 'Azul', value: '#3B82F6', hover: '#2563EB' },
-  { name: 'Violeta', value: '#8B5CF6', hover: '#7C3AED' },
   { name: 'Rosa', value: '#EC4899', hover: '#DB2777' },
 ]
 
