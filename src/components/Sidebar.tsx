@@ -1,15 +1,18 @@
 'use client'
 
+import { useState } from 'react'
 import { Wallet, Plus, LayoutDashboard, Calendar, ListOrdered, Palette, Download, Sun, Moon, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
+import AccentColorModal from '@/components/AccentColorModal'
 
 export default function Sidebar({ email }: { email: string }) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
   const { theme, setTheme } = useTheme()
+  const [showAccentModal, setShowAccentModal] = useState(false)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -72,7 +75,7 @@ export default function Sidebar({ email }: { email: string }) {
       </nav>
 
       <div className="flex flex-col gap-1.5">
-        <NavBtn icon={Palette} label="Color de acento" onClick={() => router.push('/settings')} />
+        <NavBtn icon={Palette} label="Color de acento" onClick={() => setShowAccentModal(true)} />
         <NavBtn icon={Download} label="Backup" onClick={() => router.push('/settings')} />
         <NavBtn
           icon={theme === 'dark' ? Sun : Moon}
@@ -83,6 +86,8 @@ export default function Sidebar({ email }: { email: string }) {
             Lo agregamos porque nuestra app sí requiere cerrar sesión. */}
         <NavBtn icon={LogOut} label={email} onClick={handleLogout} />
       </div>
+
+      {showAccentModal && <AccentColorModal onClose={() => setShowAccentModal(false)} />}
     </aside>
   )
 }
