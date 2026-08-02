@@ -10,7 +10,7 @@ import Topbar from '@/components/Topbar'
 import DateMaskInput from '@/components/DateMaskInput'
 import { useAccount } from '@/contexts/AccountContext'
 import * as XLSX from 'xlsx'
-import { Download, Upload, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Columns3, FileSpreadsheet } from 'lucide-react'
+import { Download, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Columns3, FileSpreadsheet } from 'lucide-react'
 
 const inputStyle = {
   background: 'var(--color-surface-alt)',
@@ -44,6 +44,46 @@ type ImportRow = {
   error?: string
 }
 
+const EXCEL_IMPORT_COLUMNS = [
+  { key: 'symbol', label: 'Símbolo', required: true },
+  { key: 'date', label: 'Fecha (dd/mm/aaaa)', required: true },
+  { key: 'time', label: 'Hora', required: false },
+  { key: 'direction', label: 'Dirección (long/short)', required: false },
+  { key: 'entryPrice', label: 'Precio entrada', required: false },
+  { key: 'exitPrice', label: 'Precio salida', required: false },
+  { key: 'size', label: 'Tamaño', required: false },
+  { key: 'commission', label: 'Comisión', required: false },
+  { key: 'pnl', label: 'P&L', required: true },
+  { key: 'stopLoss', label: 'Stop Loss', required: false },
+  { key: 'takeProfit', label: 'Take Profit', required: false },
+  { key: 'strategy', label: 'Estrategia', required: false },
+  { key: 'tags', label: 'Tags (separados por coma)', required: false },
+  { key: 'notes', label: 'Notas', required: false },
+] as const
+
+// Convierte fechas de Excel (serial, Date, dd/mm/aaaa o aaaa-mm-dd) a ISO 'aaaa-mm-dd'
+function excelDateToIso(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0')
+  }
+  if (typeof value === 'number') {
+    const d = XLSX.SSF.parse_date_code(value)
+    if (!d) return null
+    return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
+  }
+  const str = String(value).trim()
+  let m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(str) // dd/mm/aaaa o dd-mm-aaaa
+  if (m) {
+    const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3])
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    return null
+  }
+  m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(str) // por si viene aaaa-mm-dd
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  return null
+}
+
 type ColumnKey = 'date' | 'time' | 'symbol' | 'direction' | 'entry' | 'exit' | 'size' | 'strategy' | 'commission' | 'pnl' | 'notes'
 
 const HISTORY_COLUMNS: { key: ColumnKey; label: string; default: boolean }[] = [
@@ -68,7 +108,7 @@ export default function TradesPage() {
   const [trades, setTrades] = useState<Trade[]>([])
   const router = useRouter()
   const supabase = createClient()
-  const { activeAccountId, loading: accountLoading } = useAccount()
+  const { activeAccountId, activeAccount, loading: accountLoading } = useAccount()
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [symbol, setSymbol] = useState('')
@@ -77,6 +117,7 @@ export default function TradesPage() {
   const [exitPrice, setExitPrice] = useState('')
   const [quantity, setQuantity] = useState('')
   const [commission, setCommission] = useState('')
+  const [pnlInput, setPnlInput] = useState('')
   const [stopLoss, setStopLoss] = useState('')
   const [takeProfit, setTakeProfit] = useState('')
   const [strategy, setStrategy] = useState('')
@@ -155,14 +196,9 @@ export default function TradesPage() {
     setHistoryPage(1)
   }, [filterSymbol, filterStrategy, filterTag, filterFrom, filterTo])
 
-  const calculatePnL = (entry: number, exit: number, qty: number, dir: string, comm: number) => {
-    const diff = dir === 'long' ? exit - entry : entry - exit
-    return diff * qty - comm
-  }
-
   const resetForm = () => {
     setEditingId(null)
-    setSymbol(''); setEntryPrice(''); setExitPrice(''); setQuantity(''); setCommission('')
+    setSymbol(''); setEntryPrice(''); setExitPrice(''); setQuantity(''); setCommission(''); setPnlInput('')
     setStopLoss(''); setTakeProfit(''); setStrategy(''); setTagsInput(''); setNotes(''); setEntryDate('')
     setMessage('')
   }
@@ -187,6 +223,7 @@ export default function TradesPage() {
     setExitPrice(trade.exit_price?.toString() ?? '')
     setQuantity(trade.quantity.toString())
     setCommission(trade.commission?.toString() ?? '')
+    setPnlInput(trade.pnl != null ? trade.pnl.toString() : '')
     setStopLoss(trade.stop_loss?.toString() ?? '')
     setTakeProfit(trade.take_profit?.toString() ?? '')
     setStrategy(trade.strategy ?? '')
@@ -212,7 +249,12 @@ export default function TradesPage() {
     const exit = exitPrice ? parseFloat(exitPrice) : null
     const qty = parseFloat(quantity)
     const comm = parseFloat(commission) || 0
-    const pnl = exit !== null ? calculatePnL(entry, exit, qty, direction, comm) : null
+    const pnl = parseFloat(pnlInput)
+    if (isNaN(pnl)) {
+      setMessage('Error: ingresa el P&L en $')
+      setSaving(false)
+      return
+    }
     const tags = tagsInput.split(',').map((t) => t.trim()).filter((t) => t.length > 0)
 
     const tradeData = {
@@ -269,12 +311,13 @@ export default function TradesPage() {
   // --- Importación desde Excel ---
 
   const downloadTemplate = () => {
-    const headers = ['symbol', 'direction', 'entry_price', 'exit_price', 'quantity', 'commission', 'stop_loss', 'take_profit', 'strategy', 'tags', 'notes', 'entry_date']
-    const example = ['EURUSD', 'long', 1.085, 1.091, 0.5, 0, 1.08, 1.095, 'Ruptura de rango', 'breakout,plan', 'Ejemplo de fila', '2026-07-15 10:30']
+    const headers = EXCEL_IMPORT_COLUMNS.map((c) => c.label)
+    const example = ['EURUSD', '15/07/2026', '09:30', 'long', 1.085, 1.091, 0.5, 0, 150, 1.08, 1.095, 'Ruptura de rango', 'breakout,plan', 'Seguí el plan al pie de la letra']
     const ws = XLSX.utils.aoa_to_sheet([headers, example])
+    ws['!cols'] = headers.map(() => ({ wch: 20 }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Trades')
-    XLSX.writeFile(wb, 'plantilla-traderfiles.xlsx')
+    XLSX.writeFile(wb, 'plantilla-trades.xlsx')
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -292,45 +335,58 @@ export default function TradesPage() {
 
         const parsed: ImportRow[] = rows.map((row) => {
           let error = ''
-          const symbolVal = String(row.symbol ?? '').toUpperCase().trim()
-          const directionVal = String(row.direction ?? '').toLowerCase().trim() as 'long' | 'short'
-          const entryVal = parseFloat(String(row.entry_price ?? ''))
-          const exitRaw = row.exit_price
-          const exitVal = exitRaw !== undefined && exitRaw !== '' ? parseFloat(String(exitRaw)) : null
-          const qtyVal = parseFloat(String(row.quantity ?? ''))
-          const commVal = row.commission !== undefined && row.commission !== '' ? parseFloat(String(row.commission)) : 0
+          const symbolVal = String(row['Símbolo'] ?? '').toUpperCase().trim()
+
+          const isoDate = excelDateToIso(row['Fecha (dd/mm/aaaa)'])
+          const timeVal = String(row['Hora'] ?? '').trim()
+
+          let directionVal = String(row['Dirección (long/short)'] ?? '').toLowerCase().trim()
+          if (['compra', 'buy', 'long'].includes(directionVal)) directionVal = 'long'
+          else if (['venta', 'sell', 'short'].includes(directionVal)) directionVal = 'short'
+          else directionVal = 'long'
+
+          const entryRaw = row['Precio entrada']
+          const entryVal = entryRaw !== undefined && entryRaw !== '' ? parseFloat(String(entryRaw)) : NaN
+          const exitRaw = row['Precio salida']
+          const exitVal = exitRaw !== undefined && exitRaw !== '' && !isNaN(parseFloat(String(exitRaw))) ? parseFloat(String(exitRaw)) : null
+          const qtyRaw = row['Tamaño']
+          const qtyVal = qtyRaw !== undefined && qtyRaw !== '' ? parseFloat(String(qtyRaw)) : NaN
+          const commRaw = row['Comisión']
+          const commVal = commRaw !== undefined && commRaw !== '' && !isNaN(parseFloat(String(commRaw))) ? parseFloat(String(commRaw)) : 0
+          const pnlRaw = row['P&L']
+          const pnlManual = pnlRaw !== undefined && pnlRaw !== '' ? parseFloat(String(pnlRaw)) : NaN
 
           if (!symbolVal) error = 'Falta símbolo'
-          else if (directionVal !== 'long' && directionVal !== 'short') error = 'Dirección debe ser long o short'
-          else if (isNaN(entryVal)) error = 'Precio de entrada inválido'
-          else if (isNaN(qtyVal)) error = 'Cantidad inválida'
+          else if (!isoDate) error = 'Fecha inválida (usa dd/mm/aaaa)'
+          else if (isNaN(pnlManual)) error = 'P&L inválido o vacío'
 
-          let dateVal = ''
-          if (row.entry_date instanceof Date) {
-            dateVal = row.entry_date.toISOString()
-          } else if (row.entry_date) {
-            const d = new Date(String(row.entry_date))
-            dateVal = isNaN(d.getTime()) ? '' : d.toISOString()
+          const dateVal = isoDate ? `${isoDate}T${timeVal || '00:00'}:00` : new Date().toISOString()
+
+          const toNumOrNull = (v: unknown) => {
+            const n = parseFloat(String(v ?? ''))
+            return v === undefined || v === '' || v === null || isNaN(n) ? null : n
           }
-          if (!dateVal) dateVal = new Date().toISOString()
 
-          const tags = row.tags ? String(row.tags).split(',').map((t) => t.trim()).filter(Boolean) : []
-          const pnl = exitVal !== null && !error ? calculatePnL(entryVal, exitVal, qtyVal, directionVal, commVal) : null
+          const tagsRaw = String(row['Tags (separados por coma)'] ?? '').trim()
+          const tags = tagsRaw ? tagsRaw.split(',').map((t) => t.trim()).filter(Boolean) : []
+
+          // El P&L es el valor directo de la columna (igual que en el HTML); entrada/salida son solo referencia.
+          const pnlFinal = isNaN(pnlManual) ? null : pnlManual
 
           return {
             symbol: symbolVal,
-            direction: directionVal,
-            entry_price: entryVal,
+            direction: directionVal as 'long' | 'short',
+            entry_price: isNaN(entryVal) ? 0 : entryVal,
             exit_price: exitVal,
-            quantity: qtyVal,
+            quantity: isNaN(qtyVal) ? 0 : qtyVal,
             commission: commVal,
-            stop_loss: row.stop_loss ? parseFloat(String(row.stop_loss)) : null,
-            take_profit: row.take_profit ? parseFloat(String(row.take_profit)) : null,
-            strategy: row.strategy ? String(row.strategy) : null,
+            stop_loss: toNumOrNull(row['Stop Loss']),
+            take_profit: toNumOrNull(row['Take Profit']),
+            strategy: row['Estrategia'] ? String(row['Estrategia']).trim() : null,
             tags,
-            notes: row.notes ? String(row.notes) : null,
+            notes: row['Notas'] ? String(row['Notas']).trim() : null,
             entry_date: dateVal,
-            pnl,
+            pnl: pnlFinal,
             error: error || undefined,
           }
         })
@@ -419,9 +475,9 @@ export default function TradesPage() {
   const renderCell = (key: ColumnKey, trade: Trade) => {
     switch (key) {
       case 'date':
-        return <span style={{ color: 'var(--color-text-secondary)' }}>{fmtDateOnly(trade.entry_date)}</span>
+        return <span style={{ color: 'var(--color-text)' }}>{fmtDateOnly(trade.entry_date)}</span>
       case 'time':
-        return <span style={{ color: 'var(--color-text-secondary)' }}>{fmtTimeOnly(trade.entry_date)}</span>
+        return <span style={{ color: 'var(--color-text)' }}>{fmtTimeOnly(trade.entry_date)}</span>
       case 'symbol':
         return <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{trade.symbol}</span>
       case 'direction':
@@ -437,15 +493,15 @@ export default function TradesPage() {
           </span>
         )
       case 'entry':
-        return <span>{trade.entry_price ?? '—'}</span>
+        return <span style={{ color: 'var(--color-text)' }}>{trade.entry_price ?? '—'}</span>
       case 'exit':
-        return <span>{trade.exit_price ?? '—'}</span>
+        return <span style={{ color: 'var(--color-text)' }}>{trade.exit_price ?? '—'}</span>
       case 'size':
-        return <span>{trade.quantity ?? '—'}</span>
+        return <span style={{ color: 'var(--color-text)' }}>{trade.quantity ?? '—'}</span>
       case 'strategy':
-        return <span style={{ color: trade.strategy ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)' }}>{trade.strategy || '—'}</span>
+        return <span style={{ color: trade.strategy ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{trade.strategy || '—'}</span>
       case 'commission':
-        return <span>{trade.commission ? fmtMoney(trade.commission) : '—'}</span>
+        return <span style={{ color: 'var(--color-text)' }}>{trade.commission ? fmtMoney(trade.commission) : '—'}</span>
       case 'pnl':
         return (
           <span className="font-semibold" style={{ color: trade.pnl === null ? 'var(--color-text-secondary)' : trade.pnl >= 0 ? 'var(--color-green)' : 'var(--color-red)' }}>
@@ -453,7 +509,7 @@ export default function TradesPage() {
           </span>
         )
       case 'notes':
-        return <span style={{ color: trade.notes ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)' }}>{trade.notes || '—'}</span>
+        return <span style={{ color: trade.notes ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{trade.notes || '—'}</span>
       default:
         return '—'
     }
@@ -704,6 +760,11 @@ export default function TradesPage() {
                   <input type="number" step="any" placeholder="0" value={commission} onChange={(e) => setCommission(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg focus:outline-none" style={inputStyle} />
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-sm mb-1" style={{ color: 'var(--color-text-muted)' }}>P&L en $</label>
+                  <input type="number" step="any" placeholder="150" value={pnlInput} onChange={(e) => setPnlInput(e.target.value)} required
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none" style={inputStyle} />
+                </div>
                 <div>
                   <label className="block text-sm mb-1" style={{ color: 'var(--color-text-muted)' }}>Stop Loss (opcional)</label>
                   <input type="number" step="any" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)}
@@ -791,38 +852,39 @@ export default function TradesPage() {
               className="w-full max-w-lg rounded-2xl border p-6 max-h-[85vh] overflow-y-auto"
               style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-display text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Importar desde Excel</h2>
+              <div className="flex items-center justify-between mb-[18px]">
+                <h2 className="font-display text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Importar trades desde Excel</h2>
                 <button onClick={closeImportModal} style={{ color: 'var(--color-text-secondary)' }}>
                   <X size={18} />
                 </button>
               </div>
-              <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
-                Descarga la plantilla, llénala con tus trades, y súbela aquí.
+              <p className="text-[13px] mb-4 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+                Se importarán los trades a la cuenta activa: <strong style={{ color: 'var(--color-text)' }}>{activeAccount?.name ?? '—'}</strong>. Usa la plantilla para asegurarte de que las columnas coincidan.
               </p>
 
-              <div className="flex gap-3 mb-4">
+              <div className="mb-4">
                 <button
                   onClick={downloadTemplate}
-                  className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg border transition"
-                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+                  className="w-full flex items-center justify-center gap-2 text-sm px-4 py-2 rounded-lg border transition"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
                 >
-                  <Download size={16} /> Descargar plantilla
+                  <Download size={16} /> Descargar plantilla (.xlsx)
                 </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-semibold transition"
-                  style={{ background: 'var(--color-accent)', color: '#fff' }}
-                >
-                  <Upload size={16} /> Subir archivo
-                </button>
+              </div>
+
+              <div className="flex flex-col gap-1.5 mb-2">
+                <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Archivo Excel</label>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept=".xlsx,.xls,.csv"
                   onChange={handleFileChange}
-                  className="hidden"
+                  className="text-sm rounded-lg border px-3 py-2"
+                  style={inputStyle}
                 />
+                <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                  Columnas obligatorias: Símbolo, Fecha (dd/mm/aaaa) y P&L. El resto es opcional.
+                </span>
               </div>
 
               {importMessage && (
@@ -860,16 +922,28 @@ export default function TradesPage() {
                     ))}
                   </div>
 
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2.5 mt-[22px]">
+                <button
+                  onClick={closeImportModal}
+                  className="text-sm px-4 py-2 rounded-lg border transition"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
+                >
+                  Cancelar
+                </button>
+                {importRows.length > 0 && (
                   <button
                     onClick={handleConfirmImport}
                     disabled={importing || validCount === 0}
-                    className="w-full font-semibold py-2 rounded-lg transition disabled:opacity-50"
+                    className="text-sm px-4 py-2 rounded-lg font-semibold transition disabled:opacity-50"
                     style={{ background: 'var(--color-accent)', color: '#fff' }}
                   >
-                    {importing ? 'Importando...' : `Importar ${validCount} trades`}
+                    {importing ? 'Importando...' : `Importar trades`}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </>
