@@ -26,9 +26,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${spaceGrotesk.variable} ${inter.variable} font-body bg-[#0A0B0F]`}>
+      <body className={`${spaceGrotesk.variable} ${inter.variable} font-body`} style={{ background: 'var(--color-bg)' }}>
   <ThemeProvider>
-  <AccountProvider>{children}</AccountProvider>
+  <div className="bg-decor" aria-hidden="true" />
+  <div style={{ position: 'relative', zIndex: 1, isolation: 'isolate' }}>
+    <AccountProvider>{children}</AccountProvider>
+  </div>
 </ThemeProvider>
 </body>
     </html>

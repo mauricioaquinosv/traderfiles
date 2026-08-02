@@ -186,7 +186,7 @@ export default function DashboardPage() {
   const today = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+    <div className="min-h-screen">
       <Sidebar email={user?.email ?? ''} />
 
       <main className="ml-[72px]">
@@ -202,7 +202,7 @@ export default function DashboardPage() {
           <div className="max-w-6xl mx-auto">
             {/* KPIs fila 1: Balance + Realized PNL + Winrate + Profit Factor */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <div className="relative p-5 rounded-2xl border overflow-hidden" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <div className="relative glass-card overflow-hidden p-5">
                 <p className="text-xs mb-2 uppercase tracking-wide relative z-10" style={{ color: 'var(--color-text-secondary)' }}>Balance actual</p>
                 <p className="font-display text-xl font-bold relative z-10" style={{ color: 'var(--color-text)' }}>{fmtMoney(currentBalance)}</p>
                 {equityCurve.length > 1 && (
@@ -222,7 +222,7 @@ export default function DashboardPage() {
                 )}
               </div>
               {kpiRow1.map((card) => (
-                <div key={card.label} className="relative p-5 rounded-2xl border overflow-hidden" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                <div key={card.label} className="relative glass-card overflow-hidden p-5">
                   {card.label === 'Realized PNL' && equityCurve.length > 1 && (
                     <div className="absolute bottom-0 left-0 right-0 h-11 opacity-40">
                       <ResponsiveContainer width="100%" height="100%">
@@ -238,7 +238,7 @@ export default function DashboardPage() {
                       </ResponsiveContainer>
                     </div>
                   )}
-                  <div className="flex items-center gap-1.5 mb-2">
+                  <div className="relative z-10 flex items-center gap-1.5 mb-2">
                     <p className="text-xs uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>{card.label}</p>
                     {card.tooltip && (
                       <div className="group relative">
@@ -252,7 +252,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                  <p className="font-display text-xl font-bold" style={{ color: card.color }}>{card.value}</p>
+                  <p className="relative z-10 font-display text-xl font-bold" style={{ color: card.color }}>{card.value}</p>
                 </div>
               ))}
             </div>
@@ -260,8 +260,8 @@ export default function DashboardPage() {
             {/* KPIs fila 2 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {kpiRow2.map((card) => (
-                <div key={card.label} className="p-5 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                  <div className="flex items-center gap-1.5 mb-2">
+                <div key={card.label} className="glass-card p-5">
+                  <div className="relative z-10 flex items-center gap-1.5 mb-2">
                     <p className="text-xs uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>{card.label}</p>
                     {card.tooltip && (
                       <div className="group relative">
@@ -275,14 +275,14 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                  <p className="font-display text-xl font-bold" style={{ color: card.color }}>{card.value}</p>
+                  <p className="relative z-10 font-display text-xl font-bold" style={{ color: card.color }}>{card.value}</p>
                 </div>
               ))}
             </div>
 
             {/* Curva acumulada | Radar */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div className="p-6 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <div className="glass-panel p-6">
                 <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Daily Net Cumulative P&L</p>
                 {equityCurve.length === 0 ? (
                 <div className="h-36 flex items-center justify-center">
@@ -327,7 +327,7 @@ export default function DashboardPage() {
               )}
               </div>
 
-              <div className="p-6 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <div className="glass-panel p-6">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Overall score</p>
                   {closedTrades.length > 0 && (
@@ -356,7 +356,7 @@ export default function DashboardPage() {
 
             {/* Net Daily P&L | Trades recientes */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-6 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <div className="glass-panel p-6">
                 <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Net Daily P&L</p>
                 {dailyBars.length === 0 ? (
                   <div className="h-52 flex items-center justify-center">
@@ -379,7 +379,7 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="p-6 rounded-2xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <div className="glass-panel p-6">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Trades recientes</p>
                   <button onClick={() => router.push('/trades')} className="text-xs hover:opacity-80" style={{ color: 'var(--color-text-secondary)' }}>
