@@ -275,12 +275,12 @@ export default function CalendarPage() {
                   <div className="flex justify-around mt-auto pt-3 pb-4">
                     <div className="relative w-14 h-14 flex items-center justify-center">
                       <RingSvg pct={statsMetrics.totalTrades > 0 ? Math.max(0, Math.min(100, statsMetrics.winRate)) : 0} color="var(--color-green)" />
-                      <div className="text-xs font-bold relative z-10">{statsMetrics.totalTrades ? statsMetrics.winRate.toFixed(0) : '0'} %</div>
+                      <div className="text-xs font-bold relative z-10" style={{ color: 'var(--color-text)' }}>{statsMetrics.totalTrades ? statsMetrics.winRate.toFixed(0) : '0'} %</div>
                       <div className="absolute top-full mt-[7px] left-1/2 -translate-x-1/2 text-[10px] whitespace-nowrap" style={{ color: 'var(--color-text-tertiary)' }}>Winrate</div>
                     </div>
                     <div className="relative w-14 h-14 flex items-center justify-center">
                       <RingSvg pct={pfRingPct} color="var(--color-accent)" />
-                      <div className="text-xs font-bold relative z-10">{pfDisplay}</div>
+                      <div className="text-xs font-bold relative z-10" style={{ color: 'var(--color-text)' }}>{pfDisplay}</div>
                       <div className="absolute top-full mt-[7px] left-1/2 -translate-x-1/2 text-[10px] whitespace-nowrap" style={{ color: 'var(--color-text-tertiary)' }}>Net Profit Ratio</div>
                     </div>
                   </div>
