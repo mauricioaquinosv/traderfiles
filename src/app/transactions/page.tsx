@@ -119,7 +119,7 @@ useEffect(() => {
   const currentBalance = (activeAccount?.initial_balance ?? 0) + tradesPnL + totalDeposits - totalWithdrawals
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+    <div className="min-h-screen">
       <Sidebar email={user?.email ?? ''} />
 
       <main className="ml-60 p-8">

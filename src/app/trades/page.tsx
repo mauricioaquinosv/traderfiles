@@ -516,7 +516,7 @@ export default function TradesPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+    <div className="min-h-screen">
       <Sidebar email={user?.email ?? ''} />
 
       <main className="ml-[72px]">

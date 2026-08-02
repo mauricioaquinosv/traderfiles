@@ -123,7 +123,7 @@ const handleEditClick = (acc: Account) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0B0F]">
+    <div className="min-h-screen">
       <Sidebar email={user?.email ?? ''} />
 
       <main className="ml-60 p-8">
