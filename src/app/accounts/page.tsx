@@ -127,7 +127,7 @@ const handleEditClick = (acc: Account) => {
       <Sidebar email={user?.email ?? ''} />
 
       <main className="ml-60 p-8">
-        <div className="max-w-2xl mx-auto">
+        <div>
           <div className="mb-8">
             <h1 className="font-display text-2xl font-bold text-white">
               Cuentas

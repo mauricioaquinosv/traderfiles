@@ -123,7 +123,7 @@ useEffect(() => {
       <Sidebar email={user?.email ?? ''} />
 
       <main className="ml-60 p-8">
-        <div className="max-w-2xl mx-auto">
+        <div>
           <div className="mb-6">
             <h1 className="font-display text-2xl font-bold" style={{ color: 'var(--color-text)' }}>Transacciones</h1>
             <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>Depósitos y retiros de tu cuenta</p>

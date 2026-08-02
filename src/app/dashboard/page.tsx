@@ -199,7 +199,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="p-8">
-          <div className="max-w-6xl mx-auto">
+          <div>
             {/* KPIs fila 1: Balance + Realized PNL + Winrate + Profit Factor */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div className="relative glass-card overflow-hidden p-5">
@@ -285,11 +285,11 @@ export default function DashboardPage() {
               <div className="glass-panel p-6">
                 <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Daily Net Cumulative P&L</p>
                 {equityCurve.length === 0 ? (
-                <div className="h-36 flex items-center justify-center">
+                <div className="h-52 flex items-center justify-center">
                   <p className="text-sm text-center" style={{ color: 'var(--color-text-muted)' }}>Cierra al menos un trade para ver tu curva de rendimiento.</p>
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={160}>
+                <ResponsiveContainer width="100%" height={220}>
                   <AreaChart data={equityCurve}>
                     <defs>
                       <linearGradient id="splitFill" x1="0" y1="0" x2="0" y2="1">
